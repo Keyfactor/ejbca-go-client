@@ -1,0 +1,8 @@
+{
+  "$schema": "https://keyfactor.github.io/integration-manifest-schema.json",
+  "integration_type": "api-client",
+  "name": "ejbca-go-client",
+  "status": "pilot",
+  "link_github": true,
+  "description": "EJBCA Enrollment API client library for Go applications"
+}
