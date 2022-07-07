@@ -16,7 +16,6 @@ to be imported into projects that require programmatic access to EJBCA.
 * [Getting Started](https://github.com/Keyfactor/ejbca-go-client/blob/main/docs/getting-started.md)
 * Usage
     * [Documentation](https://github.com/Keyfactor/ejbca-go-client/blob/main/docs/index.md)
-* [Contributing](https://github.com/Keyfactor/ejbca-go-client/blob/main/CONTRIBUTING.md)
 * [License](https://github.com/Keyfactor/ejbca-go-client/blob/main/LICENSE)
 
 ## Requirements
