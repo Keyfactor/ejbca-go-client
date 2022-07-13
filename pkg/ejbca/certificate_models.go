@@ -1,11 +1,10 @@
 package ejbca
 
-// FinalizeCertificateEnrollment contains configuration for finalizing a certificate enrollment
-// with EJBCA, and is a required argument for the FinalizeCertificateEnrollment() method.
-type FinalizeCertificateEnrollment struct {
-	// Approval request id
-	RequestId int `json:"-,omitempty"`
+import "crypto/x509"
 
+// finalizeCertificateEnrollment contains configuration for finalizing a certificate enrollment
+// with EJBCA, and is a required argument for the FinalizeCertificateEnrollment() method.
+type finalizeCertificateEnrollment struct {
 	// ResponseFormat must be one of 'P12’, 'BCFKS’, 'JKS’, ‘DER’
 	ResponseFormat string `json:"response_format,omitempty"`
 
@@ -13,14 +12,23 @@ type FinalizeCertificateEnrollment struct {
 	Password string `json:"password,omitempty"`
 }
 
-// FinalizeCertificateEnrollmentResponse contains response data returned by the FinalizeCertificateEnrollment() method.
-type FinalizeCertificateEnrollmentResponse struct {
+type CertificateData struct {
+	Certificate        *x509.Certificate
+	SerialNumber       string
+	CertificateChain   []*x509.Certificate
+	PrivateKey         interface{}
+	CertificateProfile string
+	EndEntityProfile   string
+}
+
+type certificateDataResponse struct {
 	Certificate        string   `json:"certificate,omitempty"`
 	SerialNumber       string   `json:"serial_number,omitempty"`
 	ResponseFormat     string   `json:"response_format,omitempty"`
 	CertificateChain   []string `json:"certificate_chain,omitempty"`
 	CertificateProfile string   `json:"certificate_profile,omitempty"`
 	EndEntityProfile   string   `json:"end_entity_profile,omitempty"`
+	password           string
 }
 
 // RevokeCertificate contains configuration data required for revoking certificates enrolled by an EJBCA CA, and is
@@ -74,11 +82,6 @@ type PKCS10CSREnrollment struct {
 	IncludeChain             bool   `json:"include_chain,omitempty"`
 }
 
-// PKCS10CSREnrollmentResponse contains response content returned by the EnrollPKCS10() method.
-type PKCS10CSREnrollmentResponse struct {
-	FinalizeCertificateEnrollmentResponse
-}
-
 // GetRevocationStatusResponse contains response data returned by the CheckRevocationStatus() method.
 type GetRevocationStatusResponse struct {
 	RevokeCertificateResponse
@@ -92,15 +95,19 @@ type EnrollKeystore struct {
 	KeySpec  string `json:"key_spec,omitempty"`
 }
 
-// EnrollKeystoreResponse contains response data returned by the EnrollKeystore() method.
-type EnrollKeystoreResponse struct {
-	FinalizeCertificateEnrollmentResponse
+type CertificatesRestResponse struct {
+	Certificates []certificateDataResponse
+}
+
+type expiringCertificatesResp struct {
+	PaginationRestResponseComponent PaginationRestResponseComponent `json:"pagination_rest_response_component"`
+	CertificatesRestResponse        CertificatesRestResponse        `json:"certificates_rest_response"`
 }
 
 // The ExpiringCertificates struct is returned by the GetExpiringCertificates() method.
 type ExpiringCertificates struct {
-	PaginationRestResponseComponent PaginationRestResponseComponent `json:"pagination_rest_response_component"`
-	CertificatesRestResponse        CertificatesRestResponse        `json:"certificates_rest_response"`
+	PaginationRestResponseComponent PaginationRestResponseComponent
+	CertificatesRestResponse        []*CertificateData
 }
 
 // PaginationRestResponseComponent is a structure that is contained within the ExpiringCertificates struct
@@ -109,12 +116,6 @@ type PaginationRestResponseComponent struct {
 	MoreResults     bool `json:"more_results,omitempty"`
 	NextOffset      int  `json:"next_offset,omitempty"`
 	NumberOfResults int  `json:"number_of_results,omitempty"`
-}
-
-// CertificatesRestResponse is a structure that is contained within the ExpiringCertificates struct
-// and is used to modularize response content.
-type CertificatesRestResponse struct {
-	Certificates []FinalizeCertificateEnrollmentResponse
 }
 
 // EnrollCertificateRequest contains configuration data required to enroll a certificate request with EJBCA.
@@ -126,20 +127,15 @@ type EnrollCertificateRequest struct {
 	CertificateAuthorityName string `json:"certificate_authority_name,omitempty"`
 }
 
-// EnrollCertificateRequestResponse contains response content from EJBCA after using the EnrollCertificateRequest() method.
-type EnrollCertificateRequestResponse struct {
-	FinalizeCertificateEnrollmentResponse
-}
-
 // SearchCertificate contains search criteria required to search for certificates enrolled by EJBCA.
 type SearchCertificate struct {
 	Search
 }
 
 // SearchCertificateCriteriaResponse contains the query data returned by the SearchCertificates() method.
-type SearchCertificateCriteriaResponse struct {
-	Certificates []FinalizeCertificateEnrollmentResponse `json:"certificates,omitempty"`
-	MoreResults  bool                                    `json:"more_results,omitempty"`
+type searchCertificateCriteriaResponse struct {
+	Certificates []certificateDataResponse `json:"certificates,omitempty"`
+	MoreResults  bool                      `json:"more_results,omitempty"`
 }
 
 // V1CertificateEndpointStatus contains status information about the V1 certificate endpoint.

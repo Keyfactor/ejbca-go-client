@@ -16,6 +16,8 @@ func (e *ESTClient) CaCerts(alias string) ([]*x509.Certificate, error) {
 	endpoint := ""
 	if alias != "" {
 		endpoint = alias + "/"
+	} else if e.defaultESTAlias != "" {
+		endpoint = e.defaultESTAlias + "/"
 	}
 	endpoint += "cacerts"
 
