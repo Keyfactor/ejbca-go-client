@@ -13,8 +13,8 @@ type CertificateAuthorities struct {
 }
 
 type LatestCRL struct {
-	CRL            []string `json:"crl,omitempty"`
-	ResponseFormat string   `json:"response_format,omitempty"`
+	CRL            string `json:"crl,omitempty"`
+	ResponseFormat string `json:"response_format,omitempty"`
 }
 
 type V1CARestResourceStatus struct {

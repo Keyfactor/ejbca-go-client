@@ -1,15 +1,16 @@
 package ejbca
 
 import (
-	"log"
 	"math/rand"
 	"os"
 	"testing"
+	"time"
 )
 
 var client *Client
 
 func ejbcaTestPreCheck(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
 	if client == nil {
 		config := &Config{
 			CertificateFile: os.Getenv("EJBCA_CERTPATH"),
@@ -21,11 +22,11 @@ func ejbcaTestPreCheck(t *testing.T) {
 		factory := ClientFactory(os.Getenv("EJBCA_HOSTNAME"), config)
 		client, err = factory.NewEJBCAClient()
 		if err != nil {
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 		_, err = factory.NewESTClient(os.Getenv("EJBCA_USERNAME"), os.Getenv("EJBCA_PASSWORD"))
 		if err != nil {
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 	}
 }

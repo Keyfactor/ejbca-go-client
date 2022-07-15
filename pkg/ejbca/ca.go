@@ -1,8 +1,11 @@
 package ejbca
 
 import (
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
 	"log"
 )
 
@@ -27,8 +30,7 @@ func (c *RESTClient) GetEJBCACAList() (*CAInfo, error) {
 	return jsonResp, nil
 }
 
-// GetCACertificatePEM Deprecated
-func (c *RESTClient) GetCACertificatePEM(subjectDn string) error {
+func (c *RESTClient) GetCACertificate(subjectDn string) ([]*x509.Certificate, error) {
 	log.Printf("[INFO] Downloading CA certificate with subject DN %s", subjectDn)
 
 	endpoint := fmt.Sprintf("v1/ca/%s/certificate/download", subjectDn)
@@ -38,11 +40,33 @@ func (c *RESTClient) GetCACertificatePEM(subjectDn string) error {
 		Endpoint: endpoint,
 	}
 
-	_, err := c.sendRESTRequest(requestConfig)
+	resp, err := c.sendRESTRequest(requestConfig)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+
+	encodedBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var block *pem.Block
+	var certificate *x509.Certificate
+	var chain []*x509.Certificate
+	for {
+		block, encodedBytes = pem.Decode(encodedBytes)
+		if block == nil {
+			break
+		} else if block.Type == "CERTIFICATE" {
+			certificate, err = x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				return nil, err
+			}
+			chain = append(chain, certificate)
+		}
+
+	}
+
+	return chain, nil
 }
 
 func (c *RESTClient) GetCRLByIssuerDn(issuerDn string) (*LatestCRL, error) {

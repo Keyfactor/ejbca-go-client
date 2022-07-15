@@ -1,21 +1,28 @@
 package ejbca
 
 import (
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
 )
 
-func (c *RESTClient) FinalizeCertificateEnrollment(enrollment *FinalizeCertificateEnrollment) (*FinalizeCertificateEnrollmentResponse, error) {
-	log.Printf("[INFO] Finalizing certificate enrollment for request ID %d", enrollment.RequestId)
+func (c *RESTClient) FinalizeCertificateEnrollment(requestId int, password string) (*CertificateData, error) {
+	log.Printf("[INFO] Finalizing certificate enrollment for request ID %d", requestId)
 
-	endpoint := fmt.Sprintf("v1/certificate/%d/finalize", enrollment.RequestId)
+	endpoint := fmt.Sprintf("v1/certificate/%d/finalize", requestId)
+
+	payload := &finalizeCertificateEnrollment{
+		ResponseFormat: "DER",
+		Password:       password,
+	}
 
 	requestConfig := &request{
 		Method:   "POST",
 		Endpoint: endpoint,
-		Payload:  enrollment,
+		Payload:  payload,
 	}
 
 	resp, err := c.sendRESTRequest(requestConfig)
@@ -23,12 +30,17 @@ func (c *RESTClient) FinalizeCertificateEnrollment(enrollment *FinalizeCertifica
 		return nil, err
 	}
 
-	jsonResp := &FinalizeCertificateEnrollmentResponse{}
+	jsonResp := &certificateDataResponse{}
 	err = json.NewDecoder(resp.Body).Decode(&jsonResp)
 	if err != nil {
 		return nil, err
 	}
-	return jsonResp, nil
+
+	data, err := serializeCertificateResponse(jsonResp)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func (c *RESTClient) RevokeCertificate(rca *RevokeCertificate) (*RevokeCertificateResponse, error) {
@@ -66,7 +78,7 @@ func (c *RESTClient) RevokeCertificate(rca *RevokeCertificate) (*RevokeCertifica
 	return jsonResp, nil
 }
 
-func (c *RESTClient) EnrollPKCS10(enrollment *PKCS10CSREnrollment) (*PKCS10CSREnrollmentResponse, error) {
+func (c *RESTClient) EnrollPKCS10(enrollment *PKCS10CSREnrollment) (*CertificateData, error) {
 	log.Println("[INFO] Enrolling PKCS10 certificate")
 
 	if enrollment.CertificateProfileName == "" {
@@ -104,12 +116,13 @@ func (c *RESTClient) EnrollPKCS10(enrollment *PKCS10CSREnrollment) (*PKCS10CSREn
 		return nil, err
 	}
 
-	jsonResp := &PKCS10CSREnrollmentResponse{}
-	err = json.NewDecoder(resp.Body).Decode(&jsonResp)
+	jsonResp := &certificateDataResponse{}
+	err = json.NewDecoder(resp.Body).Decode(jsonResp)
 	if err != nil {
 		return nil, err
 	}
-	return jsonResp, nil
+
+	return serializeCertificateResponse(jsonResp)
 }
 
 // CheckRevocationStatus checks if the certificate issued by issuerDn with serial number certificateSerialNumber is revoked.
@@ -137,7 +150,7 @@ func (c *RESTClient) CheckRevocationStatus(issuerDn string, certificateSerialNum
 	return jsonResp, nil
 }
 
-func (c *RESTClient) EnrollKeystore(keystore *EnrollKeystore) (*EnrollKeystoreResponse, error) {
+func (c *RESTClient) EnrollKeystore(keystore *EnrollKeystore) (*CertificateData, error) {
 	log.Printf("[INFO] Enrolling keystore with algorithm %s", keystore.KeyAlg)
 
 	requestConfig := &request{
@@ -151,12 +164,13 @@ func (c *RESTClient) EnrollKeystore(keystore *EnrollKeystore) (*EnrollKeystoreRe
 		return nil, err
 	}
 
-	jsonResp := &EnrollKeystoreResponse{}
+	jsonResp := &certificateDataResponse{}
 	err = json.NewDecoder(resp.Body).Decode(&jsonResp)
 	if err != nil {
 		return nil, err
 	}
-	return jsonResp, nil
+
+	return serializeCertificateResponse(jsonResp)
 }
 
 func (c *RESTClient) GetExpiringCertificates(days int, offset int, maxNumberOfResults int) (*ExpiringCertificates, error) {
@@ -183,15 +197,31 @@ func (c *RESTClient) GetExpiringCertificates(days int, offset int, maxNumberOfRe
 		return nil, err
 	}
 
-	jsonResp := &ExpiringCertificates{}
+	jsonResp := &expiringCertificatesResp{}
 	err = json.NewDecoder(resp.Body).Decode(&jsonResp)
 	if err != nil {
 		return nil, err
 	}
-	return jsonResp, nil
+
+	var data []*CertificateData
+	for _, cert := range jsonResp.CertificatesRestResponse.Certificates {
+		var leaf *CertificateData
+		leaf, err = serializeCertificateResponse(&cert)
+		if err != nil {
+			return nil, err
+		}
+
+		data = append(data, leaf)
+	}
+
+	expiringCerts := new(ExpiringCertificates)
+	expiringCerts.PaginationRestResponseComponent = jsonResp.PaginationRestResponseComponent
+	expiringCerts.CertificatesRestResponse = data
+
+	return expiringCerts, nil
 }
 
-func (c *RESTClient) EnrollCertificateRequest(certificateRequest *EnrollCertificateRequest) (*EnrollCertificateRequestResponse, error) {
+func (c *RESTClient) EnrollCertificateRequest(certificateRequest *EnrollCertificateRequest) (*CertificateData, error) {
 	log.Println("[INFO] Enrolling certificate request")
 
 	requestConfig := &request{
@@ -205,15 +235,16 @@ func (c *RESTClient) EnrollCertificateRequest(certificateRequest *EnrollCertific
 		return nil, err
 	}
 
-	jsonResp := &EnrollCertificateRequestResponse{}
+	jsonResp := &certificateDataResponse{}
 	err = json.NewDecoder(resp.Body).Decode(&jsonResp)
 	if err != nil {
 		return nil, err
 	}
-	return jsonResp, nil
+
+	return serializeCertificateResponse(jsonResp)
 }
 
-func (c *RESTClient) SearchCertificates(criteria *SearchCertificate) (*SearchCertificateCriteriaResponse, error) {
+func (c *RESTClient) SearchCertificates(criteria *SearchCertificate) ([]*CertificateData, bool, error) {
 	log.Printf("[INFO] Searching EJBCA for certificates with criteria %x", criteria)
 
 	requestConfig := &request{
@@ -224,15 +255,26 @@ func (c *RESTClient) SearchCertificates(criteria *SearchCertificate) (*SearchCer
 
 	resp, err := c.sendRESTRequest(requestConfig)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	jsonResp := &SearchCertificateCriteriaResponse{}
+	jsonResp := &searchCertificateCriteriaResponse{}
 	err = json.NewDecoder(resp.Body).Decode(&jsonResp)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return jsonResp, nil
+
+	var data []*CertificateData
+	for _, cert := range jsonResp.Certificates {
+		var temp *CertificateData
+		temp, err = serializeCertificateResponse(&cert)
+		if err != nil {
+			return nil, false, err
+		}
+		data = append(data, temp)
+	}
+
+	return data, jsonResp.MoreResults, nil
 }
 
 func (c *RESTClient) GetV1CertificateStatus() (*V1CertificateEndpointStatus, error) {
@@ -254,4 +296,60 @@ func (c *RESTClient) GetV1CertificateStatus() (*V1CertificateEndpointStatus, err
 		return nil, err
 	}
 	return jsonResp, nil
+}
+
+func serializeCertificateResponse(resp *certificateDataResponse) (*CertificateData, error) {
+	data := new(CertificateData)
+	var err error
+
+	var certificates []*x509.Certificate
+	if resp.ResponseFormat == "DER" {
+		// First, extract leaf
+		var decoded []byte
+		if resp.Certificate != "" {
+			// Certificate is usually base64 encoded PEM
+			decoded, err = base64.StdEncoding.DecodeString(resp.Certificate)
+			if err != nil {
+				return nil, err
+			}
+
+			certificates, err = x509.ParseCertificates(decoded)
+			if err != nil {
+				// Sometimes, certificate response is base64 encoded twice. Before returning error, try decoding again
+				decoded, err = base64.StdEncoding.DecodeString(string(decoded))
+				if err != nil {
+					return nil, err
+				}
+				certificates, err = x509.ParseCertificates(decoded)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if len(certificates) > 0 {
+				data.Certificate = certificates[0]
+			}
+		}
+
+		if len(resp.CertificateChain) > 0 {
+			// Then, extract chain
+			for _, cert := range resp.CertificateChain {
+				decoded, err = base64.StdEncoding.DecodeString(cert)
+				if err != nil {
+					return nil, err
+				}
+				var i *x509.Certificate
+				i, err = x509.ParseCertificate(decoded)
+				if err != nil {
+					return nil, err
+				}
+				data.CertificateChain = append(data.CertificateChain, i)
+			}
+		}
+	}
+
+	data.SerialNumber = resp.SerialNumber
+	data.CertificateProfile = resp.CertificateProfile
+	data.EndEntityProfile = resp.EndEntityProfile
+
+	return data, nil
 }
