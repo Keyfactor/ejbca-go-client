@@ -77,7 +77,7 @@ func (e *ESTClient) SimpleEnroll(alias string, csr string) ([]*x509.Certificate,
 		endpoint = alias + "/"
 	} else if e.defaultESTAlias != "" {
 		// If not provided, use the default alias, if it exists
-		endpoint = alias + "/"
+		endpoint = e.defaultESTAlias + "/"
 	}
 	endpoint += "simpleenroll"
 
