@@ -19,15 +19,15 @@ import (
     "time"
 )
 
-func ClientFactory(hostname string, config *Config) *SharedClientFactory {
+func ClientFactory(hostname string, config *Config) (*SharedClientFactory, error) {
     f := new(SharedClientFactory)
     if hostname == "" {
         log.Println("[ERROR] Hostname is required to create a client factory.")
-        return nil
+        return nil, errors.New("hostname is required to create a client factory")
     }
     f.hostname = hostname
     f.config = config
-    return f
+    return f, nil
 }
 
 func (f *SharedClientFactory) NewEJBCAClient() (*Client, error) {
@@ -148,8 +148,6 @@ func buildHTTPClient(config *Config) (*http.Client, error) {
         return nil, err
     }
 
-    logSystemCaCerts()
-
     // Configure new TLS object
     tlsConfig := &tls.Config{
         Certificates:  []tls.Certificate{*cert},
@@ -161,6 +159,8 @@ func buildHTTPClient(config *Config) (*http.Client, error) {
         if err != nil {
             return nil, err
         }
+    } else {
+        logSystemCaCerts()
     }
 
     // Configure HTTP transports with TLS config
@@ -205,9 +205,9 @@ func buildEstHTTPClient(config *Config) (*http.Client, error) {
             return nil, err
         }
         tlsConfig.Certificates = []tls.Certificate{*cert}
+    } else {
+        logSystemCaCerts()
     }
-
-    logSystemCaCerts()
 
     // If a CA was provided, add it to the trusted CA pool
     if config.CAFile != "" {
